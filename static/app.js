@@ -990,18 +990,6 @@ async function openIngresoDetalle(iid) {
     const canMed = _canMedico();
     const canAdm = _canAdmisionEdit();
 
-    const lockTab = (id, locked) => {
-  const b = detailEl.querySelector("#"+id);
-  if (!b) return;
-  b.disabled = !!locked;
-  b.title = locked ? "Completa la admisión primero" : "";
-  b.style.opacity = locked ? "0.55" : "1";
-};
-
-lockTab("tabHc", !admCompleta);
-lockTab("tabOrd", !admCompleta);
-lockTab("tabEvo", !admCompleta);
-lockTab("tabEpi", !admCompleta);
     detailEl.innerHTML = `
       <div class="card">
         <div class="flex" style="justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">
@@ -1020,125 +1008,83 @@ lockTab("tabEpi", !admCompleta);
           </div>
 
           <div class="flex" style="gap:8px;margin-top:12px;flex-wrap:wrap;">
-  <button class="btn-ghost" id="tabAdm" type="button">Admisión</button>
-  <button class="btn-ghost" id="tabHc" type="button">Historia clínica</button>
-  <button class="btn-ghost" id="tabOrd" type="button">Órdenes (${ord.length})</button>
-  <button class="btn-ghost" id="tabEvo" type="button">Evoluciones (${evol.length})</button>
-  <button class="btn-ghost" id="tabEpi" type="button">Epicrisis</button>
-</div>
+            <button class="btn-ghost" id="tabAdm" type="button">Admisión</button>
+            <button class="btn-ghost" id="tabHc" type="button">Historia clínica</button>
+            <button class="btn-ghost" id="tabOrd" type="button">Órdenes (${ord.length})</button>
+            <button class="btn-ghost" id="tabEvo" type="button">Evoluciones (${evol.length})</button>
+            <button class="btn-ghost" id="tabEpi" type="button">Epicrisis</button>
+          </div>
         </div>
       </div>
 
       <div id="tabBody"></div>
     `;
 
-    const btnNewEvo = detailEl.querySelector("#btnNewEvo");
-const btnNewOrd = detailEl.querySelector("#btnNewOrd");
-const btnEpicrisis = detailEl.querySelector("#btnEpicrisis");
-const btnRefreshDet = detailEl.querySelector("#btnRefreshDet");
+    const lockTab = (id, locked) => {
+      const b = detailEl.querySelector("#" + id);
+      if (!b) return;
+      b.disabled = !!locked;
+      b.title = locked ? "Completa la admisión primero" : "";
+      b.style.opacity = locked ? "0.55" : "1";
+    };
 
-if (btnRefreshDet) {
-  btnRefreshDet.addEventListener("click", () => openIngresoDetalle(iid));
-}
-
-if (btnNewEvo) {
-  btnNewEvo.disabled = !canMed || !admCompleta;
-  btnNewOrd.disabled = !canMed || !admCompleta;
-  btnEpicrisis.disabled = !canMed || !admCompleta;
-  btnNewEvo.addEventListener("click", () => modalNuevaEvolucion(iid, () => openIngresoDetalle(iid)));
-}
-if (!admCompleta) return alert("Debes completar la admisión primero.");
-
-if (btnNewOrd) {
-  btnNewOrd.disabled = !canMed;
-  btnNewOrd.addEventListener("click", () => modalNuevaOrden(iid, false, () => openIngresoDetalle(iid)));
-}
-
-if (btnEpicrisis) {
-  btnEpicrisis.disabled = !canMed;
-  btnEpicrisis.addEventListener("click", () => modalEpicrisis(iid, epi, () => openIngresoDetalle(iid)));
-}
+    lockTab("tabHc", !admCompleta);
+    lockTab("tabOrd", !admCompleta);
+    lockTab("tabEvo", !admCompleta);
+    lockTab("tabEpi", !admCompleta);
 
     const body = detailEl.querySelector("#tabBody");
-const tabAdm = detailEl.querySelector("#tabAdm");
-const tabHc  = detailEl.querySelector("#tabHc");
-const tabOrd = detailEl.querySelector("#tabOrd");
-const tabEvo = detailEl.querySelector("#tabEvo");
-const tabEpi = detailEl.querySelector("#tabEpi");
 
-if (tabAdm) tabAdm.addEventListener("click", () => {
-  setActive("tabAdm");
-  renderTabAdmision(body, iid, adm, ing, canAdm, () => openIngresoDetalle(iid));
-});
-
-tabHc.addEventListener("click", () => {
-  setActive("tabHc");
-  if (!window.renderTabHistoriaClinica) return alert("No se cargó historia_clinica.js");
-  window.renderTabHistoriaClinica(body, iid, ing, adm, () => openIngresoDetalle(iid));
-});
-
-if (tabOrd) tabOrd.addEventListener("click", () => {
-  setActive("tabOrd");
-  renderTabOrdenes(body, iid, ord, canMed, () => openIngresoDetalle(iid));
-});
-
-if (tabEvo) tabEvo.addEventListener("click", () => {
-  setActive("tabEvo");
-  renderTabEvoluciones(body, iid, evol, canMed, ing, () => openIngresoDetalle(iid));
-});
-
-if (tabEpi) tabEpi.addEventListener("click", () => {
-  setActive("tabEpi");
-  renderTabEpicrisis(body, epi);
-});
-
-if (!tabHc) {
-  console.error("No existe #tabHc. Revisa detailEl.innerHTML (tabs duplicados o falta el botón).");
-  return alert("No aparece el botón Historia clínica (#tabHc).");
-}
     const setActive = (id) => {
-  ["tabAdm","tabHc","tabOrd","tabEvo","tabEpi"].forEach(x => {
-    const el = detailEl.querySelector("#"+x);
-    if (el) el.classList.remove("btn");
-  });
-  const el = detailEl.querySelector("#"+id);
-  if (el) el.classList.add("btn");
-};
-detailEl.querySelector("#tabAdm").addEventListener("click", () => {
-  setActive("tabAdm");
-  renderTabAdmision(body, iid, adm, ing, canAdm, () => openIngresoDetalle(iid));
-});
+      ["tabAdm", "tabHc", "tabOrd", "tabEvo", "tabEpi"].forEach(x => {
+        const el = detailEl.querySelector("#" + x);
+        if (el) el.classList.remove("btn");
+      });
+      const el = detailEl.querySelector("#" + id);
+      if (el) el.classList.add("btn");
+    };
 
-detailEl.querySelector("#tabHc").addEventListener("click", () => {
-  setActive("tabHc");
-  if (!window.renderTabHistoriaClinica) return alert("No se cargó historia_clinica.js");
-  window.renderTabHistoriaClinica(body, iid, ing, adm, () => openIngresoDetalle(iid));
-});
+    detailEl.querySelector("#tabAdm").addEventListener("click", () => {
+      setActive("tabAdm");
+      renderTabAdmision(body, iid, adm, ing, canAdm, () => openIngresoDetalle(iid));
+    });
 
-detailEl.querySelector("#tabOrd").addEventListener("click", () => {
-  setActive("tabOrd");
-  renderTabOrdenes(body, iid, ord, canMed, () => openIngresoDetalle(iid));
-});
+    detailEl.querySelector("#tabHc").addEventListener("click", () => {
+      setActive("tabHc");
+      if (!window.renderTabHistoriaClinica) return alert("No se cargó historia_clinica.js");
+      window.renderTabHistoriaClinica(body, iid, ing, adm, () => openIngresoDetalle(iid));
+    });
 
-detailEl.querySelector("#tabEvo").addEventListener("click", () => {
-  setActive("tabEvo");
-  renderTabEvoluciones(body, iid, evol, canMed, ing, () => openIngresoDetalle(iid));
-});
+    detailEl.querySelector("#tabOrd").addEventListener("click", () => {
+      setActive("tabOrd");
+      renderTabOrdenes(body, iid, ord, canMed, () => openIngresoDetalle(iid));
+    });
 
-detailEl.querySelector("#tabEpi").addEventListener("click", () => {
-  setActive("tabEpi");
-  renderTabEpicrisis(body, epi);
-});
+    detailEl.querySelector("#tabEvo").addEventListener("click", () => {
+      setActive("tabEvo");
+      renderTabEvoluciones(body, iid, evol, canMed, ing, () => openIngresoDetalle(iid));
+    });
 
-    setActive("tabHc");
-if (!window.renderTabHistoriaClinica) return alert("No se cargó historia_clinica.js");
-window.renderTabHistoriaClinica(body, iid, ing, adm, () => openIngresoDetalle(iid));
+    detailEl.querySelector("#tabEpi").addEventListener("click", () => {
+      setActive("tabEpi");
+      renderTabEpicrisis(body, epi);
+    });
+
+    if (!admCompleta) {
+      setActive("tabAdm");
+      renderTabAdmision(body, iid, adm, ing, canAdm, () => openIngresoDetalle(iid));
+    } else {
+      setActive("tabHc");
+      if (!window.renderTabHistoriaClinica) return alert("No se cargó historia_clinica.js");
+      window.renderTabHistoriaClinica(body, iid, ing, adm, () => openIngresoDetalle(iid));
+    }
   } catch (e) {
     detailEl.innerHTML = `<div class="card"><p class="muted" style="color:#b00020;">${escapeHtml(e.message)}</p></div>`;
   }
 }
 
 function renderTabAdmision(body, iid, adm, ing, canEdit, onSaved) {
+  const isComplete = !!(adm && (adm.admision_completa === 1 || adm.admision_completa === true));
   body.innerHTML = `
     <div class="card">
       <h3 style="margin-top:0;">Hoja de Admisión</h3>
@@ -1188,7 +1134,11 @@ function renderTabAdmision(body, iid, adm, ing, canEdit, onSaved) {
 
         ${canEdit ? `
           <div class="flex" style="justify-content:flex-end;gap:8px;margin-top:12px;">
-            <button class="btn" id="btnSaveAdm" type="button">Guardar admisión</button>
+            <button class="btn-ghost" id="btnSaveAdm" type="button">Guardar admisión</button>
+            ${isComplete
+              ? `<button class="btn-ghost" id="btnMarkAdmIncomplete" type="button">Marcar incompleta</button>`
+              : `<button class="btn" id="btnMarkAdmComplete" type="button">Marcar completa</button>`
+            }
           </div>
           <div id="admMsg" class="muted" style="margin-top:8px;"></div>
         ` : ``}
@@ -1205,13 +1155,7 @@ function renderTabAdmision(body, iid, adm, ing, canEdit, onSaved) {
   if (f && !f.value) f.value = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
   if (h && !h.value) h.value = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
 
-  body.querySelector("#btnMarkAdmComplete").addEventListener("click", async () => {
-  const msg = body.querySelector("#admMsg");
-  msg.textContent = "";
-  msg.style.color = "#6b7280";
-
-  // Reusa el mismo payload (lo recalculamos)
-  const payload = {
+  const buildPayload = () => ({
     codigo: body.querySelector("#adCodigo").value.trim(),
     fecha: body.querySelector("#adFecha").value,
     hora: body.querySelector("#adHora").value,
@@ -1231,35 +1175,63 @@ function renderTabAdmision(body, iid, adm, ing, canEdit, onSaved) {
     dx_3: body.querySelector("#dx3").value.trim(),
     dx_4: body.querySelector("#dx4").value.trim(),
     dx_5: body.querySelector("#dx5").value.trim(),
+  });
 
-    admision_completa: 1,
-  };
-body.querySelector("#btnMarkAdmIncomplete").addEventListener("click", async () => {
-  if (!confirm("¿Marcar admisión como INCOMPLETA? Se bloquearán historia clínica/órdenes/evoluciones/epicrisis.")) return;
-  try {
-    await api(`/api/ingresos/${iid}/admision`, { method: "PUT", body: JSON.stringify({ admision_completa: 0 }) });
-    if (onSaved) await onSaved();
-  } catch (e) {
-    alert(e.message);
-  }
-});
-  const errs = requiredErrors(payload);
-  if (errs.length) {
-    msg.textContent = "Faltan campos para completar admisión:\n" + errs.join("\n");
-    msg.style.color = "#b00020";
-    return;
+  const btnSaveAdm = body.querySelector("#btnSaveAdm");
+  if (btnSaveAdm) {
+    btnSaveAdm.addEventListener("click", async () => {
+      const msg = body.querySelector("#admMsg");
+      msg.textContent = "";
+      msg.style.color = "#6b7280";
+      try {
+        await api(`/api/ingresos/${iid}/admision`, { method: "PUT", body: JSON.stringify(buildPayload()) });
+        msg.textContent = "✓ Admisión guardada";
+        msg.style.color = "#137a3a";
+        if (onSaved) await onSaved();
+      } catch (e) {
+        msg.textContent = e.message;
+        msg.style.color = "#b00020";
+      }
+    });
   }
 
-  try {
-    await api(`/api/ingresos/${iid}/admision`, { method: "PUT", body: JSON.stringify(payload) });
-    msg.textContent = "✓ Admisión COMPLETA";
-    msg.style.color = "#137a3a";
-    if (onSaved) await onSaved(); // esto refresca openIngresoDetalle y habilita tabs
-  } catch (e) {
-    msg.textContent = e.message;
-    msg.style.color = "#b00020";
+  const btnMarkComplete = body.querySelector("#btnMarkAdmComplete");
+  if (btnMarkComplete) {
+    btnMarkComplete.addEventListener("click", async () => {
+      const msg = body.querySelector("#admMsg");
+      msg.textContent = "";
+      msg.style.color = "#6b7280";
+      const payload = { ...buildPayload(), admision_completa: 1 };
+      const missing = ["nombres", "apellidos", "fecha", "hora"].filter(k => !payload[k]);
+      if (missing.length) {
+        msg.textContent = "Faltan campos requeridos: " + missing.join(", ");
+        msg.style.color = "#b00020";
+        return;
+      }
+      try {
+        await api(`/api/ingresos/${iid}/admision`, { method: "PUT", body: JSON.stringify(payload) });
+        msg.textContent = "✓ Admisión COMPLETA";
+        msg.style.color = "#137a3a";
+        if (onSaved) await onSaved();
+      } catch (e) {
+        msg.textContent = e.message;
+        msg.style.color = "#b00020";
+      }
+    });
   }
-});
+
+  const btnMarkIncomplete = body.querySelector("#btnMarkAdmIncomplete");
+  if (btnMarkIncomplete) {
+    btnMarkIncomplete.addEventListener("click", async () => {
+      if (!confirm("¿Marcar admisión como INCOMPLETA? Se bloquearán historia clínica/órdenes/evoluciones/epicrisis.")) return;
+      try {
+        await api(`/api/ingresos/${iid}/admision`, { method: "PUT", body: JSON.stringify({ admision_completa: 0 }) });
+        if (onSaved) await onSaved();
+      } catch (e) {
+        alert(e.message);
+      }
+    });
+  }
 }
 function renderTabOrdenes(body, iid, ord, canEdit, onRefresh) {
   body.innerHTML = `
