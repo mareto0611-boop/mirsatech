@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Mirsa Tech</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"/>
+</head>
+<body>
+  <div id="mainPanel">
+    <header class="top-header">
+      <div class="brand">
+        <img id="brandLogo" src="" alt="Logo" class="logo" style="display:none;" />
+        <div>
+          <h1 id="orgName">Cargando...</h1>
+          <div class="powered" id="poweredBy">Mirsa Tech®</div>
+        </div>
+      </div>
+
+      <button class="config-btn" title="Configuración" onclick="openModule('superadmin')">
+        <i class="fas fa-cog"></i>
+      </button>
+    </header>
+
+    <div class="container">
+      <h2>Panel Principal</h2>
+      <div class="menu-grid">
+        <button class="menu-btn" onclick="openModule('emergencias')"><i class="fas fa-ambulance"></i><br>Médico de Emergencias</button>
+        <button class="menu-btn" onclick="openModule('enfermeria')"><i class="fas fa-user-nurse"></i><br>Enfermería</button>
+        <button class="menu-btn" onclick="openModule('especialista')"><i class="fas fa-user-md"></i><br>Médico Especialista</button>
+        <button class="menu-btn" onclick="openModule('planta')"><i class="fas fa-procedures"></i><br>Médico de Planta</button>
+        <button class="menu-btn" onclick="openModule('farmacia')"><i class="fas fa-pills"></i><br>Farmacia</button>
+        <button class="menu-btn" onclick="openModule('facturacion')"><i class="fas fa-file-invoice-dollar"></i><br>Facturación</button>
+        <button class="menu-btn" onclick="openModule('admision')"><i class="fas fa-door-open"></i><br>Admisión</button>
+        <button class="menu-btn" onclick="openModule('auditor')"><i class="fas fa-clipboard-list"></i><br>Auditoría Médica</button>
+        <button class="menu-btn" onclick="openModule('administrador')"><i class="fas fa-user-cog"></i><br>Administrador</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="workspacePanel" style="display:none;">
+    <header class="top-header">
+      <div class="brand">
+        <img id="brandLogo2" src="" alt="Logo" class="logo" style="display:none;" />
+        <div>
+          <h1 id="orgName2">Cargando...</h1>
+          <div class="powered" id="poweredBy2">Mirsa Tech®</div>
+        </div>
+      </div>
+    </header>
+
+    <div class="workspace-header">
+      <h2 id="workspaceTitle">Workspace</h2>
+      <div class="workspace-right">
+        <span class="session-pill" id="sessionInfo"></span>
+        <button class="logout-btn" onclick="logout()">Cerrar Sesión</button>
+      </div>
+    </div>
+
+    <div class="container workspace-body">
+      <div id="module-content" class="module-panel"></div>
+    </div>
+  </div>
+
+  <footer id="globalFooter" class="global-footer">
+    <span id="footerText">© <span id="footerYear"></span> <span id="footerOrg">Mirsa Tech Hospital</span>. Todos los derechos reservados.</span>
+    <span id="footerPowered">— <span id="footerPoweredBy">Mirsa Tech®</span></span>
+  </footer>
+
+  <script src="/static/app.js"></script>
+  <script src="/static/historia_clinica.js"></script>
+  <script src="/static/enfermeria.js"></script>
+  <script src="/static/asegurados.js"></script>
+ </body>
+</html>
