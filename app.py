@@ -133,15 +133,70 @@ def audit(action, entity=None, entity_id=None, before=None, after=None):
     conn.commit()
     conn.close()
 
-def init_db():
-    conn = db()
-    cur = conn.cursor()
-
 def _admision_completa(conn, iid: int) -> bool:
     cur = conn.cursor()
     cur.execute("SELECT admision_completa FROM ingresos_admision WHERE ingreso_id=?", (iid,))
     row = cur.fetchone()
     return bool(row and int(row["admision_completa"] or 0) == 1)
+
+
+def _maybe_assign_medico_responsable(conn, iid: int, u: dict):
+    """Assign medico_responsable_* if not yet assigned (only for regular medicos, not privileged roles)."""
+    role = u.get("role", "")
+    if role in ("auditor", "administrador", "superadmin"):
+        return
+    cur = conn.cursor()
+    cur.execute("SELECT medico_responsable_user FROM ingresos WHERE id=?", (iid,))
+    row = cur.fetchone()
+    if row and not row["medico_responsable_user"]:
+        cur.execute(
+            "UPDATE ingresos SET medico_responsable_user=?, medico_responsable_role=?, medico_asignado_at=?, updated_at=? WHERE id=?",
+            (u.get("username"), role, now_local(), now_local(), iid),
+        )
+
+
+def _can_clinical_edit(iid: int, u: dict) -> bool:
+    """Return True if user may write clinical docs (historia/evoluciones/ordenes/epicrisis)."""
+    role = u.get("role", "")
+    if role in ("auditor", "administrador", "superadmin"):
+        return True
+    if not _can_ingresos_write_medico(role):
+        return False
+    conn = db()
+    cur = conn.cursor()
+    cur.execute("SELECT medico_responsable_user FROM ingresos WHERE id=?", (iid,))
+    row = cur.fetchone()
+    conn.close()
+    if not row:
+        return False
+    existing = row["medico_responsable_user"]
+    if not existing:
+        return True  # Will be assigned on first write
+    return existing == u.get("username")
+
+
+def _recalc_ingreso_completado(conn, iid: int):
+    """Recalculate ingresos.completado (1 if all four criteria met, else 0)."""
+    cur = conn.cursor()
+    cur.execute("SELECT admision_completa FROM ingresos_admision WHERE ingreso_id=?", (iid,))
+    adm = cur.fetchone()
+    adm_ok = bool(adm and int(adm["admision_completa"] or 0) == 1)
+    cur.execute("SELECT id FROM ingresos_historia_clinica WHERE ingreso_id=?", (iid,))
+    hist_ok = cur.fetchone() is not None
+    cur.execute("SELECT COUNT(*) AS c FROM ingreso_ordenes WHERE ingreso_id=?", (iid,))
+    ord_ok = int(cur.fetchone()["c"]) >= 1
+    cur.execute("SELECT COUNT(*) AS c FROM ingreso_evoluciones WHERE ingreso_id=?", (iid,))
+    evo_ok = int(cur.fetchone()["c"]) >= 1
+    completado = 1 if (adm_ok and hist_ok and ord_ok and evo_ok) else 0
+    cur.execute(
+        "UPDATE ingresos SET completado=?, updated_at=? WHERE id=?",
+        (completado, now_local(), iid),
+    )
+
+
+def init_db():
+    conn = db()
+    cur = conn.cursor()
 
     cur.execute("""
     CREATE TABLE IF NOT EXISTS users(
@@ -303,6 +358,18 @@ def _admision_completa(conn, iid: int) -> bool:
         cur.execute("ALTER TABLE ingresos_admision ADD COLUMN admision_completa INTEGER NOT NULL DEFAULT 0")
     except sqlite3.OperationalError:
         pass
+
+    # migrate: ingresos lock/completion columns
+    for _col, _ddl in [
+        ("medico_responsable_user", "ALTER TABLE ingresos ADD COLUMN medico_responsable_user TEXT"),
+        ("medico_responsable_role", "ALTER TABLE ingresos ADD COLUMN medico_responsable_role TEXT"),
+        ("medico_asignado_at",      "ALTER TABLE ingresos ADD COLUMN medico_asignado_at TEXT"),
+        ("completado",              "ALTER TABLE ingresos ADD COLUMN completado INTEGER NOT NULL DEFAULT 0"),
+    ]:
+        try:
+            cur.execute(_ddl)
+        except sqlite3.OperationalError:
+            pass
 
     cur.execute("""
     CREATE TABLE IF NOT EXISTS ingresos_historia_clinica(
@@ -2014,20 +2081,7 @@ def _can_ingresos_write_medico(role: str) -> bool:
     return role in ("emergencias", "planta", "especialista", "auditor", "administrador", "superadmin")
 
 def _can_historia_edit(iid: int, u: dict) -> bool:
-    if u.get("role") == "auditor":
-        return True
-    # Solo médicos pueden ser "creador"
-    if not _can_ingresos_write_medico(u.get("role", "")):
-        return False
-
-    conn = db()
-    cur = conn.cursor()
-    cur.execute("SELECT creado_por_user FROM ingresos WHERE id=?", (iid,))
-    row = cur.fetchone()
-    conn.close()
-    if not row:
-        return False
-    return (row["creado_por_user"] == u.get("username"))
+    return _can_clinical_edit(iid, u)
 
 def _can_ingresos_write_admision(role: str) -> bool:
     # hoja admisión
@@ -2124,7 +2178,8 @@ def api_ingresos_list():
       SELECT id, created_at, updated_at, estado,
              creado_por_user, creado_por_role, especialista_user,
              sala, habitacion, cama,
-             especialidad, fecha_ingreso, hora_ingreso
+             especialidad, fecha_ingreso, hora_ingreso,
+             completado, medico_responsable_user
       FROM ingresos
       WHERE 1=1
     """
@@ -2198,6 +2253,7 @@ def api_ingresos_put_historia(iid: int):
     if not _admision_completa(conn, iid):
         conn.close()
         return jsonify({"ok": False, "error": "Debes completar la admisión antes de llenar Historia Clínica."}), 409
+    _maybe_assign_medico_responsable(conn, iid, u)
     cur = conn.cursor()
 
     data = request.get_json(force=True, silent=True) or {}
@@ -2244,6 +2300,7 @@ def api_ingresos_put_historia(iid: int):
             [payload[k] for k in cols] + [now, u["username"], u["role"], iid]
         )
 
+    _recalc_ingreso_completado(conn, iid)
     conn.commit()
     conn.close()
 
@@ -2294,6 +2351,7 @@ def api_ingresos_update_admision(iid: int):
     vals.extend([now_local(), u["username"], u["role"]])
 
     cur.execute(f"UPDATE ingresos_admision SET {', '.join(sets)} WHERE ingreso_id=?", (*vals, iid))
+    _recalc_ingreso_completado(conn, iid)
     conn.commit()
 
     cur.execute("SELECT * FROM ingresos_admision WHERE ingreso_id=?", (iid,))
@@ -2310,7 +2368,7 @@ def api_ingresos_update_admision(iid: int):
 @require_login
 def api_ingresos_add_evolucion(iid: int):
     u = session["user"]
-    if not _can_ingresos_write_medico(u["role"]):
+    if not _can_clinical_edit(iid, u):
         return jsonify({"ok": False, "error": "No permitido"}), 403
 
     conn = db()
@@ -2331,6 +2389,7 @@ def api_ingresos_add_evolucion(iid: int):
         conn.close()
         return jsonify({"ok": False, "error": "Ingreso no existe"}), 404
 
+    _maybe_assign_medico_responsable(conn, iid, u)
     cur.execute("""
       INSERT INTO ingreso_evoluciones(
         ingreso_id, fecha_hora, nota,
@@ -2338,18 +2397,17 @@ def api_ingresos_add_evolucion(iid: int):
       ) VALUES (?,?,?,?,?,?,?)
     """, (iid, fecha_hora, nota, now_local(), now_local(), u["username"], u["role"]))
     eid = cur.lastrowid
+    _recalc_ingreso_completado(conn, iid)
     conn.commit()
     conn.close()
 
     audit("CREATE_EVOLUCION", entity="ingreso_evoluciones", entity_id=eid, after={"ingreso_id": iid, "user": u["username"]})
     return jsonify({"ok": True, "id": eid})
-    
+
 @APP.put("/api/ingresos/evoluciones/<int:eid>")
 @require_login
 def api_ingresos_update_evolucion(eid: int):
     u = session["user"]
-    if not _can_ingresos_write_medico(u["role"]):
-        return jsonify({"ok": False, "error": "No permitido"}), 403
 
     data = request.get_json(force=True, silent=True) or {}
     fecha_hora = (data.get("fecha_hora") or "").strip()
@@ -2365,6 +2423,10 @@ def api_ingresos_update_evolucion(eid: int):
     if not prev:
         conn.close()
         return jsonify({"ok": False, "error": "No existe"}), 404
+
+    if not _can_clinical_edit(prev["ingreso_id"], u):
+        conn.close()
+        return jsonify({"ok": False, "error": "No permitido"}), 403
 
     before = dict(prev)
 
@@ -2393,13 +2455,14 @@ DEFAULT_MEDIDAS_GENERALES = (
 @require_login
 def api_ingresos_add_orden(iid: int):
     u = session["user"]
-    if not _can_ingresos_write_medico(u["role"]):
+    if not _can_clinical_edit(iid, u):
         return jsonify({"ok": False, "error": "No permitido"}), 403
 
     conn = db()
     if not _admision_completa(conn, iid):
         conn.close()
         return jsonify({"ok": False, "error": "Debes completar la admisión antes de crear Órdenes."}), 409
+    _maybe_assign_medico_responsable(conn, iid, u)
     cur = conn.cursor()
 
     data = request.get_json(force=True, silent=True) or {}
@@ -2443,6 +2506,7 @@ def api_ingresos_add_orden(iid: int):
     """, (iid, fecha_hora, medidas, ordenes, now_local(), now_local(), u["username"], u["role"]))
     oid = cur.lastrowid
 
+    _recalc_ingreso_completado(conn, iid)
     conn.commit()
     conn.close()
 
@@ -2459,15 +2523,13 @@ def api_ingresos_add_orden(iid: int):
 @require_login
 def api_ingresos_update_orden(oid: int):
     u = session["user"]
-    if not _can_ingresos_write_medico(u["role"]):
-        return jsonify({"ok": False, "error": "No permitido"}), 403
 
     data = request.get_json(force=True, silent=True) or {}
     fecha_hora = (data.get("fecha_hora") or "").strip()
     medidas = (data.get("medidas_generales") or "").strip()
     ordenes = (data.get("ordenes") or "").strip()
 
-    # valida mínimos (en edición no deberías “inventar defaults” si vienen vacíos;
+    # valida mínimos (en edición no deberías "inventar defaults" si vienen vacíos;
     # pero si quieres mantener tu comportamiento, déjalo así)
     if not medidas:
         return jsonify({"ok": False, "error": "medidas_generales requerido"}), 400
@@ -2482,6 +2544,10 @@ def api_ingresos_update_orden(oid: int):
     if not prev:
         conn.close()
         return jsonify({"ok": False, "error": "No existe"}), 404
+
+    if not _can_clinical_edit(prev["ingreso_id"], u):
+        conn.close()
+        return jsonify({"ok": False, "error": "No permitido"}), 403
 
     before = dict(prev)
 
@@ -2514,19 +2580,19 @@ def api_ingresos_update_orden(oid: int):
         }
     )
     return jsonify({"ok": True})
-
 # ---------- Epicrisis / Egreso ----------
 @APP.post("/api/ingresos/<int:iid>/epicrisis")
 @require_login
 def api_ingresos_save_epicrisis(iid: int):
     u = session["user"]
-    if not _can_ingresos_write_medico(u["role"]):
+    if not _can_clinical_edit(iid, u):
         return jsonify({"ok": False, "error": "No permitido"}), 403
 
     conn = db()
     if not _admision_completa(conn, iid):
         conn.close()
         return jsonify({"ok": False, "error": "Debes completar la admisión antes de realizar Epicrisis/Egreso."}), 409
+    _maybe_assign_medico_responsable(conn, iid, u)
     cur = conn.cursor()
 
     data = request.get_json(force=True, silent=True) or {}
